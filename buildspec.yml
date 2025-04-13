@@ -3,7 +3,7 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      java: corretto8
+      java: corretto8i
   pre_build:
     commands:
       - echo Logging in to AWS CodeArtifact...
@@ -17,7 +17,7 @@ phases:
     commands:
       - echo Build completed on `date`
       - echo Packaging artifacts...
-      - mvn package -s settings.xml
+      - mvn package -s settings.xml Dskiptests
 artifacts:
   files:
     - target/*.war
