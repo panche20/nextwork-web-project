@@ -17,7 +17,7 @@ phases:
     commands:
       - echo Build completed on `date`
       - echo Packaging artifacts...
-      - mvn package -s settings.xml Dskiptests
+      - mvn package -s settings.xml -Dskiptests
 artifacts:
   files:
     - target/*.war
