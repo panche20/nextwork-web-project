@@ -885,3 +885,474 @@ Upload the following CloudFormation template: *nextworkwebapp.yaml*
 This is attached in this project file
 ```
 
+**💡 What is a CloudFormation template?**
+A CloudFormation template is a text file where you tell CloudFormation the AWS resources you want to create and how they should be configured - like specifying "I want a t2.micro EC2 instance with this security group and permissions to access this S3 bucket." The beauty is that this template is both human-readable AND machine-executable. In our project, we're using YAML because it's a bit friendlier to read than JSON (fewer brackets and quotes to keep track of!).
+
+- Verify the file nextworkwebapp.yaml is uploaded and select Next.
+
+**Configure Stack Details**
+
+- Select Next.
+- Enter NextWorkCodeDeployEC2Stack as the Stack name.
+- Next, we'll need to add our IP address to the template.
+- Head to https://checkip.amazonaws.com/ and copy your IP address.
+- Paste your IP address into the MyIP parameter field and add /32 at the end.
+- Select Next.
+
+**Configure Stack Options**
+
+- In Configure stack options, under Stack failure options, select Roll back all stack resources.
+- Next, select Delete all newly created resources.
+
+**💡 What are Stack failure options?**
+Stack failure options are your safety net when things don't go as planned. They determine what CloudFormation should do if it runs into an error while creating your resources:
+
+**Roll back all stack resources**: This is like having an "undo" button for your entire deployment. If anything fails, CloudFormation will automatically revert everything back to how it was before you started. This prevents you from ending up with a half-built environment that might not work or cost you money unnecessarily.
+
+**Delete all newly created resources**: This makes sure CloudFormation cleans up after itself during a rollback. No resources left behind to surprise you on your bill next month!
+
+These options are especially valuable when you're learning - they let you experiment without worrying about leaving a mess behind.
+
+- Scroll down to Capabilities and check the box I acknowledge that AWS CloudFormation might create IAM resources.
+
+**💡 Why would CloudFormation create an IAM role?**
+IAM roles are like special visitor passes that AWS services can "wear" to temporarily access other services. In our case, our deployment EC2 instance will use a role to access files from S3.
+
+Hmmm... why do you think it'll need access to S3 (have you created an S3 bucket anywhere)? Aha - your deployment environment will need to use the build artifacts stored in your S3 bucket!
+
+- Select Next.
+
+**Review and Submit**
+
+Let's review our stack's details!
+
+- Template: Template is ready
+- Stack name: NextWorkCodeDeployEC2Stack
+- Parameters: MyIP is filled with your IP and /32
+- Rollback on failure: Activated
+- Delete all newly created resources during rollback: Activated
+- Select Submit.
+
+**Monitor Stack Creation**
+
+CloudFormation is now launching the stack in the background! This process will create the EC2 instance and networking resources in the background.
+While we're wating...
+
+Let's check out the Resources tab.
+You can see a list of the resources being created!
+
+**💡 What resources are being created by the CloudFormation template?**
+The CloudFormation template is creating a:
+
+**VPC (Virtual Private Cloud)**: A virtual network in the cloud for your AWS resources.
+**Subnet**: A subdivision of the VPC where you can place resources.
+**Route Tables**: Define how network traffic is routed within the VPC.
+**Internet Gateway**: Allows resources in your VPC to connect to the internet.
+**Security Group**: Acts as a virtual firewall to control inbound and outbound traffic for your EC2 instance.
+**EC2 Instance**: The virtual server where your web application will be deployed.
+
+**💡 Why are we deploying networking resources too?**
+By defining these networking resources in the template, we're not just launching an EC2 instance, but creating a complete, secure, and configurable infrastructure that can be easily replicated or modified. This is an especially good idea for EC2 instances that are hosting web apps, because they have more complex needs like connecting with multiple databases and controlling both public and private network traffic.
+
+- Next, you can also check the Events tab.
+- You can watch your CloudFormation stack's events in real-time in the Events tab - just keep refreshing it!
+
+**💡 What is a CloudFormation stack event?**
+Every time CloudFormation creates, updates, or deletes something, it records an event - "Starting to create EC2 instance," "Security group created successfully," "Oh no, there isn't enough capacity to create a new VPC." These events give you visibility into exactly what's happening behind the scenes, which is super helpful for troubleshooting if something goes wrong.
+
+- Wait for the stack's status to become CREATE_COMPLETE.
+
+### Step 2 : Prepare Deployment Scripts and AppSpec
+
+Now that our EC2 instance is up and running, can we start deploying our application?
+
+Mmm, not yet. To start deploying our application, we need to prepare a set of scripts and configuration files for CodeDeploy. It's like we need to write a set of instructions for CodeDeploy to follow - otherwise, it wouldn't know how to deploy our application!
+
+**In this step, you're going to:**
+
+- Create deployment scripts for installing dependencies, starting, and stopping the server.
+- Create an appspec.yml file to tell CodeDeploy how to handle the deployment process.
+- Update buildspec.yml to package deployment files in your build artifact.
+
+<img width="1071" height="322" alt="image" src="https://github.com/user-attachments/assets/fc579636-0421-4898-863b-0f760f7f20b9" />
+
+**Create Scripts Folder**
+- In your IDE, create a new folder at the root of your project directory.
+- Name the folder scripts
+
+**Create install_dependencies.sh**
+
+- Inside the scripts folder, create a new file.
+- Let's name the file install_dependencies.sh
+- Add the following content to install_dependencies.sh:
+
+```
+#!/bin/bash
+sudo yum install tomcat -y
+sudo yum -y install httpd
+sudo cat << EOF > /etc/httpd/conf.d/tomcat_manager.conf
+<VirtualHost *:80>
+  ServerAdmin root@localhost
+  ServerName app.nextwork.com
+  DefaultType text/html
+  ProxyRequests off
+  ProxyPreserveHost On
+  ProxyPass / http://localhost:8080/nextwork-web-project/
+  ProxyPassReverse / http://localhost:8080/nextwork-web-project/
+</VirtualHost>
+EOF
+```
+
+**💡 What does install_dependencies.sh do?**
+The install_dependencies.sh script sets up all the software needed to run our website by installing programs (called Tomcat and Apache) that handle internet traffic and host our application. It then creates special settings that let these programs to work together, making our website accessible to visitors on the internet.
+
+
+**💡 Extra for Experts**: Can we break down each line in install_dependencies.sh?
+This script sets up everything our application needs to run:
+
+**#!/bin/bash:** This is like telling the computer "Hey, run this file using bash" (it's called a shebang line).
+**sudo yum install tomcat -y:** Installs Tomcat (our Java application server) - the -y means "yes to all prompts" so it won't stop and ask questions.
+**sudo yum -y install httpd:** Installs Apache HTTP server - this is like the front desk receptionist for our web application.
+**sudo cat << EOF > /etc/httpd/conf.d/tomcat_manager.conf:** 
+This starts a special block that writes multiple lines to a configuration file at once - like dictating a whole letter instead of typing it line by line.
+
+The lines between <VirtualHost *:80> and </VirtualHost> create a configuration file for Apache to act as a reverse proxy for Tomcat. This is like telling Apache: "When visitors come to our website, don't talk to them directly - instead, silently pass their requests to Tomcat who's running our actual application."
+ProxyRequests off: Tells Apache not to act as a general proxy for any website (a security measure).
+ProxyPreserveHost On: Makes sure Apache remembers who the original request was for.
+ProxyPass and ProxyPassReverse: These are the magic lines that actually connect Apache to our Tomcat application.
+EOF: Marks the end of our configuration block - everything between the first EOF and this one gets written to the file.
+
+
+**💡 Extra for Experts: What is a reverse proxy?**
+A reverse proxy is like a receptionist for your web application. When visitors (users) come to your site, they talk to the receptionist (Apache) first, who then forwards their requests to the right person (Tomcat) behind the scenes. The visitors never interact directly with the backend server! This is a common pattern in web architecture that gives you more control over how requests are handled.
+
+**Create start_server.sh**
+
+- Still inside the scripts folder, let's create a new file again.
+- This time, let's name the file start_server.sh
+- Add the following content to start_server.sh:
+
+```
+#!/bin/bash
+sudo systemctl start tomcat.service
+sudo systemctl enable tomcat.service
+sudo systemctl start httpd.service
+sudo systemctl enable httpd.service
+```
+
+**💡 What does this script do?**
+This script starts both Tomcat (our Java application server) and Apache (our web server) and makes sure they'll restart automatically if the EC2 instance ever reboots.
+
+
+**💡 What is systemctl?**
+systemctl is the command-line tool for controlling services on modern Linux systems. Think of it as the master control panel for all the programs running in the background on your server. With systemctl, you can start services ("Hey Apache, time to wake up!"), stop them ("Tomcat, take a break"), check their status ("Is MySQL actually running?"), or set them to start automatically on boot. It's an essential tool for server management that gives you a standardized way to control just about any service on your Linux instance.
+
+
+**💡 What does each line in start_server.sh do?**
+
+**#!/bin/bash:** This tells the system to use the bash shell to interpret this script.
+**sudo systemctl start tomcat10:** Fires up Tomcat (our Java application server) - like turning the key in the ignition.
+**sudo systemctl enable tomcat10:** Sets Tomcat to auto-start whenever the server reboots - like setting your car to automatically start every morning.
+**sudo systemctl start httpd:** Starts Apache HTTP server - turning on our web server frontend.
+**sudo systemctl enable httpd:** Sets Apache to auto-start on reboot too.
+
+Together, these commands ensure our application is up and running and will stay that way even if the server restarts.
+
+**Create stop_server.sh script**
+- Inside the scripts folder, create a new file named stop_server.sh
+- Add the following content to stop_server.sh:
+
+```
+#!/bin/bash
+isExistApp="$(pgrep httpd)"
+if [[ -n $isExistApp ]]; then
+sudo systemctl stop httpd.service
+fi
+isExistApp="$(pgrep tomcat)"
+if [[ -n $isExistApp ]]; then
+sudo systemctl stop tomcat.service
+fi
+```
+
+**💡 What does stop_server.sh do?**
+This script safely stops web server services by first checking if they're running. It uses pgrep to check for running processes of Apache (httpd) and Tomcat, and only attempts to stop the services if they are actually active. This prevents errors that could occur from trying to stop services that aren't running.
+
+Specifically, the script:
+
+Checks if Apache (httpd) is running
+Stops Apache if it is active
+Checks if Tomcat is running
+Stops Tomcat if it is active
+
+
+**💡 Extra for Experts:** Why do we check if the server is running before stopping it?
+We check if the server is running first because trying to stop something that's not running can cause errors that might interrupt our deployment.
+
+This makes our script more robust and reliable. If we blindly tried to stop services regardless of their state, we might get error messages that could cause our deployment to fail unnecessarily. Good scripts anticipate potential issues instead of assuming everything is in an ideal state - that's the difference between code that works in perfect conditions versus code that works in the real world!
+
+- Save the stop_server.sh file by pressing Ctrl+S.
+- Check that you have install_dependencies.sh, start_server.sh, and stop_server.sh inside the scripts folder.
+
+**Create appspec.yml**
+
+- Create a new file, but this time at the root of your project.
+- Make sure this file is NOT inside the scripts folder!
+- Let's name the file appspec.yml
+- Add the following content to appspec.yml:
+
+```
+version: 0.0
+os: linux
+files:
+  - source: /target/nextwork-web-project.war
+    destination: /usr/share/tomcat/webapps/
+hooks:
+  BeforeInstall:
+    - location: scripts/install_dependencies.sh
+      timeout: 300
+      runas: root
+  ApplicationStart:
+    - location: scripts/start_server.sh
+      timeout: 300
+      runas: root
+  ApplicationStop:
+    - location: scripts/stop_server.sh
+      timeout: 300
+      runas: root
+```
+
+**💡 What does each section in appspec.yml mean?**
+The appspec.yml file is essentially the instruction manual for CodeDeploy. Here's what each part does:
+
+version: 0.0: This is just the format version CodeDeploy expects (yes, starting at 0.0 is a bit odd).
+os: linux: Tells CodeDeploy we're deploying to a Linux system, not Windows.
+files: This section maps what files go where:
+source: /target/nextwork-web-project.war: "Take this WAR file from our artifact..."
+destination: /usr/share/tomcat10/webapps/: "...and put it here on the EC2 instance."
+hooks: These are like event triggers that run at specific points in the deployment:
+BeforeInstall: "Before you install the new version, run this script" - we're stopping the server first.
+AfterInstall: "After the files are copied, run this" - we're installing dependencies.
+ApplicationStart: "Once everything's ready, run this" - we're starting the server.
+Each hook specifies the script location, a timeout (5 minutes max), and that it should run as the root user.
+Think of appspec.yml as the choreographer that ensures everyone moves in the right sequence during deployment.
+
+**💡 Extra for Experts**: CodeDeploy lifecycle events
+Each phase in the appspec.yml file is a CodeDeploy lifecycle event. Lifecycle events are like the chapters in your deployment story - predefined points where you can hook in custom scripts to perform specific actions. They're the key to customizing exactly how your application gets deployed.
+
+Think of it like baking a cake: there are distinct phases (mixing ingredients, baking, cooling, frosting) where different actions need to happen. CodeDeploy's lifecycle events are similar - BeforeInstall, Install, AfterInstall, ApplicationStart, etc.
+
+- Save the appspec.yml file by pressing Ctrl+S.
+
+**Update buildspec.yml File**
+- Open buildspec.yml and modify the artifacts section to include appspec.yml and the scripts folder:
+
+```
+artifacts:
+  files:
+    - target/nextwork-web-project.war
+    - appspec.yml
+    - scripts/**/*
+  discard-paths: no
+```
+
+**Commit and Push Changes to GitHub**
+
+```
+git add .
+git commit -m "Adding CodeDeploy files"
+git push
+```
+- Head to your GitHub repository in the browser. Let's check that the scripts folder and appspec.yml file are in your repository!
+
+### Step 3 : Set Up CodeDeploy
+
+Now, let's get to know CodeDeploy and set it up to automate the deployment of our web app!
+
+**In this step, you're going to:**
+
+- Create a CodeDeploy application, which is an application that you want to deploy.
+- Create a CodeDeploy deployment group, which is like a folder of deployment settings for the same application.
+- Give CodeDeploy the permission to access CodeArtifact.
+
+<img width="1076" height="327" alt="image" src="https://github.com/user-attachments/assets/95dbd724-26d7-4f6a-bae2-3ca319e22a32" />
+
+
+**Create CodeDeploy Application**
+
+- Head to the CodeDeploy console.
+- Select Applications in the left hand navigation menu.
+- Select Create application.
+
+**💡 What is a CodeDeploy application?**
+A CodeDeploy application is like the main folder for your deployment project. It doesn't do much on its own, but it helps you organize everything related to deploying one application.
+
+
+In more technical, AWS terms, a CodeDeploy application is a namespace or container that groups deployment configurations, deployment groups, and revisions for a specific application. Having separate CodeDeploy applications helps you manage multiple applications without mixing up their deployment resources.
+
+- Enter nextwork-devops-cicd as the Application name.
+- Choose EC2/On-premises as the Compute platform.
+- Select Create application.
+
+**Create Deployment Group**
+
+- Select Create deployment group.
+
+**💡 What is a CodeDeploy deployment group?**
+A deployment group is a collection of EC2 instances that are grouped to deploy something together.
+
+It's also where you plan out exactly where and how your application gets deployed on this group of instances. In other words, it's where you tell CodeDeploy "let's deploy this app to these specific servers, using this deployment pattern, with these load balancing settings, and handle failures this way."
+
+
+The power of deployment groups is that you can have multiple groups within the same application - maybe one for your test environment, another for staging, and a third for production. Each can have different settings and target different sets of servers, but they all deploy the same core application. This adds to the (many) reasons why CI/CD tools are so powerful - in this case, CodeDeploy saves you the time it'd take to manually deploy the same app to each instance in each environment.
+
+- Enter *nextwork-devops-cicd-deploymentgroup* as the Deployment group name.
+- Under Service role, check if you have a service role available...
+- Maybe not!
+
+**💡 Why does CodeDeploy need IAM roles?**
+CodeDeploy needs IAM roles to get permissions to access and manage AWS resources on your behalf. These permissions let CodeDeploy do things like:
+
+Accessing EC2 instances to deploy applications.
+Reading application artifacts from S3 buckets.
+Updating Auto Scaling groups.
+Write CloudWatch logs about what it's doing
+
+**Create an IAM Role for CodeDeploy**
+
+- Head to the IAM console.
+- In the IAM console, select Roles from the left hand navigation bar.
+- Select Create role.
+- Choose AWS service as the trusted entity type.
+- Choose CodeDeploy as the service and select CodeDeploy as the use case.
+- Select Next.
+- You'll notice the AWSCodeDeployRole default policy is suggested already - nice! That's all we need.
+- Click on the plus button to take a look at the permissions this grants. There are many actions that we're allowing in this policy!
+- Phew, this saves us the time from defining all these permission policies ourselves.
+- Select Next.
+- Expand the AWSCodeDeployRole policy to review its permissions.
+- Review the EC2 permissions within the policy
+
+**💡 What permissions does AWSCodeDeployRole policy include?**
+The AWSCodeDeployRole policy lets CodeDeploy work with your EC2 instances. It includes permissions for:
+
+Auto Scaling, so CodeDeploy can handle deployments when you're automatically scaling instances up or down
+EC2, so CodeDeploy can interact with your instances - tag them, query them, and deploy to them
+Elastic Load Balancing, so CodeDeploy can temporarily remove instances from load balancers during deployment
+CloudWatch, so CodeDeploy can send logs and metrics so you can monitor what's happening
+S3, so CodeDeploy can access the build artifacts stored in S3 buckets
+
+Not that these permissions are carefully scoped to only what CodeDeploy actually needs to do its job, instead of everything in your AWS account. This is a best practice in security called the "principle of least privilege."
+
+- Select Next.
+- Enter NextWorkCodeDeployRole as the Role name.
+- Add a description to help you remember why you created this role.
+
+```
+Allows CodeDeploy to call AWS services such as Auto Scaling on your behalf.
+Created as a part of NextWork's Cl/CD Pipeline series.
+```
+
+- Review the Permissions policies and make sure AWSCodeDeployRole is attached.
+- Select Create role.
+- Let's double check that the NextWorkCodeDeployRole is created.
+
+**Select Service Role in CodeDeploy**
+
+- Head back to the CodeDeploy deployment group configuration tab.
+- Looks like we'll need to refresh the page to use the new service role!
+- Refresh the page, and re-enter nextwork-devops-cicd-deploymentgroup as Deployment group name.
+- Select the newly created NextWorkCodeDeployRole as the Service role.
+- Choose In-place as the Deployment type.
+- Under Environment configuration, select Amazon EC2 instances.
+- In Tag group 1, enter role as the Key.
+- Enter webserver as the Value.
+- Check the line below your tag settings - you might notice that 1 unique matched instance is found.
+- Click Click here for details to view the matched instance.
+- You'll see an EC2 instance called NextWorkCodeDeployEC2Stack::WebServer - that's the EC2 instance we launched from our CloudFormation template. This confirms     to us that the web app will be deployed onto that instance instance.
+
+**Configure Agent and Deployment Settings**
+
+- Now let's head back to your CodeDeploy Deployment group set up.
+- Under Agent configuration with AWS Systems Manager, select Now and schedule updates and Basic scheduler with 14 Days.
+- In Deployment settings, keep the default CodeDeployDefault.AllAtOnce
+
+**💡 What are deployment settings?**
+Deployment settings help you control how quickly you'd like to roll out your application.
+
+**CodeDeployDefault.AllAtOnce** deploys the application to all instances in the deployment group at the same time. It's the fastest option, but also the riskiest - if something goes wrong, all your instances could be affected at once.
+
+
+**💡 Extra for Experts:** How do you know what deployment setting to choose?
+For production environments, you might choose more conservative options like OneAtATime (update one instance, make sure it works, then move to the next) or HalfAtATime (update 50% of instances, verify, then do the rest). These slower approaches reduce risk by limiting the blast radius of any potential issues.
+
+For production systems with hundreds of instances, these settings become crucial. Imagine updating your banking app on all servers simultaneously vs. trying it on 10% first to make sure customers can still access their accounts! But since we only have one instance in our project, the cautious approach doesn't offer much benefit.
+
+We're using AllAtOnce in this project because we only have one instance and we're learning - speed is more important than caution here!
+
+- Deselect *Enable load balancing*.
+- Select Create deployment group
+
+### Step 4 : Create and Verify Deployment
+
+It's time to put everything together and deploy our web application to the EC2 instance!
+
+**In this step, you're going to:**
+
+- Create a CodeDeploy deployment.
+- Monitor the deployment process.
+- Access and verify the deployed web application.
+
+<img width="1072" height="337" alt="image" src="https://github.com/user-attachments/assets/2c599a98-1ae5-48a1-a042-937746c1f92c" />
+
+**Create Deployment**
+
+- In the deployment group details page, select **Create deployment**.
+
+**💡 What is a CodeDeploy deployment?**
+A CodeDeploy deployment represents a single update to your application, with its own unique ID and history. When you create a deployment, you're telling CodeDeploy:
+
+Which version of the application to deploy (the revision)
+Where to deploy it (the deployment group)
+How to deploy it (the deployment settings) 
+
+CodeDeploy then orchestrates the entire process - stopping services, copying files, running scripts, starting services - and keeps track of whether it succeeds or fails. You can monitor it happening in real-time and see a detailed log of each step.
+
+- Under Revision type, make sure My application is stored in Amazon S3 is selected. That's because our deployment artifact is inside an S3 bucket!
+- Head back to your S3 bucket called nextwork-devops-cicd.
+- Click into the nextwork-devops-cicd-artifact build artifact.
+- Copy the file's S3 URI.
+- Paste the S3 URI into the Revision location field in CodeDeploy.
+- Select .zip as the Revision file type.
+
+**💡 What is a revision location? Why did we use our WAR/zip file?**
+The revision location is the place where CodeDeploy looks to find your application's build artifacts. We're using the S3 bucket that's storing our WAR file, so CodeDeploy knows where to find the latest version of our web app it's deploying to the deployment EC2 instances!
+
+- Next, we'll leave Additional deployment behavior settings as default.
+
+**💡 Extra for Experts: What are Additional deployment behaviors settings and Deployment group overrides?**
+These settings give you extra flexibility when you need to handle special cases without changing your standard deployment settings:
+
+**Additional deployment behaviors** settings let you configure options like how to handle file permissions during deployment or whether to immediately allow traffic to new instances.
+
+**Deployment group overrides** let you to override deployment group settings for a specific deployment - maybe you normally deploy one instance at a time (safe but slow), but for a critical security fix, you want to override that and deploy to all instances at once (faster but riskier).
+
+- Select Create deployment.
+- Off we go! CodeDeploy kicks off a deployment of your web app.
+- Scroll down to Deployment lifecycle events and monitor the events by clicking View events.
+- See the lifecycle events progressing, such as BeforeInstall, ApplicationStart, etc. These are the events you defined in appspec.yml!
+- Whoops! After a few minutes of waiting, you might notice that you hit an error...
+- Why do you think your deployment failed?
+- Don't forget, CodeDeploy is deploying your web app by grabbing the latest build artifact from your S3 bucket.
+- When was the last time you ran a build on CodeBuild? 🤔
+- Aha - our last time running a build was before we added appspec and the deployment scripts!
+- Because of this, your deployment instance isn't getting any of the scripts you've written - causing the error you're seeing now.
+- Head back to your CodeBuild build project, and rebuild your project.
+- Once your second build is a success, return to CodeDeploy and retry the deployment.
+
+**Check Your Deployed App!**
+- Wait until the deployment status says Success.
+- Select the Instance ID in the Deployment lifecycle events panel. This takes you to the deployment EC2 instance you launched with CloudFormation.
+- Get the Public IPv4 DNS of your EC2 instance from the EC2 console.
+- Open the Public IPv4 DNS in a web browser.
+- It might take a minute or two for the application to become fully accessible after deployment.
+- WOOOHOOO! Welcome to your application!
