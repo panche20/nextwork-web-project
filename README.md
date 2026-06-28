@@ -819,3 +819,69 @@ git push
 - Your build will show In progress to start with.
 - Select the Build logs tab.
 
+## Part 5 : Deploy a Web App with CodeDeploy
+
+<img width="1077" height="352" alt="image" src="https://github.com/user-attachments/assets/03dd105b-b9e6-42a0-a64f-aaa5e93ac753" />
+
+**Get ready to:**
+☁️ Launch a deployment environment using AWS CloudFormation.
+⚙️ Write deployment scripts to automate deployment commands.
+🚀 Deploy your web app with CodeDeploy and see it live!
+💎 Implement a disaster recovery technique - roll back a deployment!
+
+**💡 Why am I learning about AWS CodeDeploy?**
+When you're developing software, you need a reliable way to release new versions of your app to the world.
+
+AWS CodeDeploy is a continuous deployment service, which means it automates how you get new software versions onto your servers. Instead of manually moving files and restarting services yourself, CodeDeploy automatically runs a deployment using settings and commands that you define.
+
+As part of a CI/CD pipeline, CodeDeploy makes software releases faster, more consistent, and way less stressful.
+
+**🌐 What is deployment?**
+
+Deployment is a process that takes your code from development to ➡️ a live environment where users can access it.
+Deployment usually comes with many manual steps, like copying files to servers or installing depdencies. This can be time-consuming, error-prone, and difficult to reproduce consistently.
+
+**🤔 Then... What is AWS CodeDeploy?**
+AWS CodeDeploy is a continuous deployment service. This means CodeDeploy...
+Automates deployments: Eliminates error-prone manual steps - no more manually copying files and running commands to deploy your application.
+Enables consistent rollouts: Your application deploys the same way every time.
+Minimizes downtime: Can deploy in ways that keep your application available.
+Handles failures: Can automatically roll back if something goes wrong.
+
+<img width="1071" height="352" alt="image" src="https://github.com/user-attachments/assets/3de8409c-cd10-4bf8-ad1c-49f90575d4f8" />
+
+### Step 1 : Launch EC2 with CloudFormation
+
+Let's start our deployment by setting up the deployment infrastructure. We'll use CloudFormation to launch an EC2 instance and its networking resources.
+
+**In this step, you're going to:**
+
+- Launch an EC2 instance using CloudFormation.
+- Configure network settings for the EC2 instance.
+- Understand Infrastructure as Code.
+
+- Head to the CloudFormation console.
+
+**💡 What is AWS CloudFormation?**
+Think of CloudFormation is AWS' infrastructure as code tool. Instead of clicking around the AWS console to set up resources (which gets tedious fast!), you write a single template file that describes everything you need - your EC2 instances, security groups, databases, and more. Then, CloudFormation reads this file and builds your entire environment for you, exactly the same way every time.
+
+
+**💡 What is Infrastructure as Code?**
+Just like software developers write code to build applications, Infrastructure as Code (IaC) is a type of software that lets you write code to create your servers, networks, and other infrastructure. Instead of manually configuring each server (time-consuming and error-prone), you have a script that sets everything up perfectly every time. Your infrastructure becomes predictable, repeatable, and much easier to manage!
+
+**Create a CloudFormation Stack**
+- Select Create stack.
+- Select With new resources (standard) from the dropdown menu.
+
+**💡 What is a CloudFormation stack?**
+When you deploy a CloudFormation template, you're creating a stack - think of it as a project folder that holds all your connected resources. The cool thing is that CloudFormation treats this stack as a single unit, so you can create, update, or delete all those resources together with one command.
+
+- Select Template is ready.
+- Select Upload a template file.
+- Select Choose file.
+Upload the following CloudFormation template: *nextworkwebapp.yaml*
+
+```
+This is attached in this project file
+```
+
